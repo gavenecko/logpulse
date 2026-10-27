@@ -136,7 +136,7 @@ export default function AdminPage() {
             </div>
             <h2 className="text-2xl font-black text-white">Founder Access</h2>
             <p className="text-xs text-slate-400 mt-2">
-              Enter your master key to view project analytics and export leads. (Default: <code className="text-indigo-300">pulse2026</code>)
+              Enter your master key to view project analytics and export leads.
             </p>
 
             <form onSubmit={handleLogin} className="mt-6 space-y-4">
