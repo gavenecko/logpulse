@@ -4,6 +4,15 @@ import { db } from '@/lib/store';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
+  const query = searchParams.get('query');
+
+  if (query) {
+    const project = await db.findProjectByQuery(query);
+    if (!project) {
+      return NextResponse.json({ error: 'No workspace found with that ID or email.' }, { status: 404 });
+    }
+    return NextResponse.json({ project });
+  }
 
   if (!id) {
     return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });
@@ -20,7 +29,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, domain = '', accentColor = '#6366f1' } = body;
+    const { name, domain = '', accentColor = '#6366f1', ownerEmail = '' } = body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 });
@@ -30,7 +39,7 @@ export async function POST(request: NextRequest) {
     const project = await db.createProject({
       name: name.trim(),
       domain: domain.trim(),
-      ownerEmail: '',
+      ownerEmail: ownerEmail.trim(),
       plan: 'free',
       accentColor,
       showBranding: true,
@@ -54,5 +63,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, project });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to create project' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { projectId, email } = body;
+
+    if (!projectId || !email) {
+      return NextResponse.json({ error: 'Project ID and email are required' }, { status: 400 });
+    }
+
+    const success = await db.updateProjectEmail(projectId, email);
+    if (!success) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to update email' }, { status: 500 });
   }
 }

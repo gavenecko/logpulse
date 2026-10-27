@@ -14,12 +14,17 @@ import {
   Settings,
   ThumbsUp,
   FolderPlus,
+  Mail,
+  KeyRound,
+  ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 import { ChangelogItem, RoadmapItem, Project } from '@/lib/types';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'changelog' | 'roadmap' | 'settings'>('changelog');
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Active Project State
@@ -30,8 +35,11 @@ export default function DashboardPage() {
 
   // Onboarding / Project Creation Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'restore'>('create');
   const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectEmail, setNewProjectEmail] = useState('');
   const [newProjectColor, setNewProjectColor] = useState('#6366f1');
+  const [restoreQuery, setRestoreQuery] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
 
   // Form states
@@ -42,6 +50,10 @@ export default function DashboardPage() {
   const [roadmapTitle, setRoadmapTitle] = useState('');
   const [roadmapDesc, setRoadmapDesc] = useState('');
   const [roadmapStatus, setRoadmapStatus] = useState<'planned' | 'in_progress' | 'completed'>('planned');
+
+  // Email attach state in settings
+  const [attachEmail, setAttachEmail] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
 
   const [upgrading, setUpgrading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -57,7 +69,6 @@ export default function DashboardPage() {
       setCurrentProjectId(idToLoad);
       loadProjectData(idToLoad);
     } else {
-      // First time visitor: show onboarding modal
       setShowCreateModal(true);
       setLoading(false);
     }
@@ -93,6 +104,7 @@ export default function DashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newProjectName.trim(),
+          ownerEmail: newProjectEmail.trim(),
           accentColor: newProjectColor,
         }),
       });
@@ -104,6 +116,7 @@ export default function DashboardPage() {
         setProject(data.project);
         setShowCreateModal(false);
         setNewProjectName('');
+        setNewProjectEmail('');
         window.history.replaceState(null, '', `?p=${data.project.id}`);
         await loadProjectData(data.project.id);
         setMessage(`🎉 Created workspace for ${data.project.name}!`);
@@ -115,6 +128,64 @@ export default function DashboardPage() {
       alert('Error creating workspace');
     } finally {
       setCreatingProject(false);
+    }
+  };
+
+  const handleRestoreProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restoreQuery.trim()) return;
+
+    setCreatingProject(true);
+    try {
+      const res = await fetch(`/api/projects?query=${encodeURIComponent(restoreQuery.trim())}`);
+      const data = await res.json();
+      if (res.ok && data.project) {
+        localStorage.setItem('logpulse_project_id', data.project.id);
+        setCurrentProjectId(data.project.id);
+        setProject(data.project);
+        setShowCreateModal(false);
+        setRestoreQuery('');
+        window.history.replaceState(null, '', `?p=${data.project.id}`);
+        await loadProjectData(data.project.id);
+        setMessage(`✨ Restored workspace: ${data.project.name}`);
+        setTimeout(() => setMessage(null), 4000);
+      } else {
+        alert(data.error || 'No workspace found with that ID or email.');
+      }
+    } catch {
+      alert('Failed to restore workspace');
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const handleSaveEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!attachEmail.trim() || !project) return;
+
+    setSavingEmail(true);
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          email: attachEmail.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setProject({ ...project, ownerEmail: attachEmail.trim() });
+        setAttachEmail('');
+        setMessage('✅ Email linked! You can now restore this workspace anytime with your email.');
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        alert(data.error || 'Failed to save email');
+      }
+    } catch {
+      alert('Error saving email');
+    } finally {
+      setSavingEmail(false);
     }
   };
 
@@ -247,6 +318,7 @@ export default function DashboardPage() {
 
   const hostUrl = typeof window !== 'undefined' ? window.location.origin : 'https://logpulse-flame.vercel.app';
   const embedScript = `<script src="${hostUrl}/widget.js" data-project-id="${project?.id || 'demo'}" async></script>`;
+  const secretDashboardUrl = `${hostUrl}/dashboard?p=${project?.id || 'demo'}`;
 
   const copyEmbed = () => {
     navigator.clipboard.writeText(embedScript);
@@ -254,73 +326,161 @@ export default function DashboardPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const copySecretLink = () => {
+    navigator.clipboard.writeText(secretDashboardUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
-      {/* Onboarding / New Project Modal */}
+      {/* Onboarding / Restore Project Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-8 shadow-2xl relative">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4">
-              <Zap className="w-6 h-6" />
-            </div>
-            <h2 className="text-2xl font-black text-white">Create Your Project</h2>
-            <p className="text-sm text-slate-400 mt-2">
-              Set up your in-app changelog in seconds. You will get your own private board and embed snippet.
-            </p>
-
-            <form onSubmit={handleCreateProject} className="mt-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Project or Website Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. My Next.js SaaS, Portfolio, Acme App"
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500"
-                  required
-                  autoFocus
-                />
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
+                <Zap className="w-6 h-6" />
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Accent Color
-                </label>
-                <div className="flex items-center gap-3">
-                  {['#6366f1', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4'].map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setNewProjectColor(color)}
-                      style={{ backgroundColor: color }}
-                      className={`w-7 h-7 rounded-full border-2 transition transform hover:scale-110 ${
-                        newProjectColor === color ? 'border-white scale-110' : 'border-transparent'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-2 flex flex-col gap-2">
-                <button
-                  type="submit"
-                  disabled={creatingProject}
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition"
-                >
-                  {creatingProject ? 'Creating Workspace...' : 'Launch My Workspace →'}
-                </button>
-
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
                 <button
                   type="button"
-                  onClick={switchToDemo}
-                  className="w-full py-2.5 text-xs text-slate-400 hover:text-white transition"
+                  onClick={() => setModalMode('create')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition ${
+                    modalMode === 'create' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  Or explore the demo sandbox
+                  New Project
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalMode('restore')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition ${
+                    modalMode === 'restore' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Sign In / Restore
                 </button>
               </div>
-            </form>
+            </div>
+
+            {modalMode === 'create' ? (
+              <>
+                <h2 className="text-2xl font-black text-white">Create Your Project</h2>
+                <p className="text-sm text-slate-400 mt-2">
+                  Launch your in-app changelog in seconds. You will get your own private board and embed snippet.
+                </p>
+
+                <form onSubmit={handleCreateProject} className="mt-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Project or Website Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. My Next.js SaaS, Portfolio, Acme App"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500"
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>Your Email</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Optional (to save link)</span>
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="you@company.com"
+                      value={newProjectEmail}
+                      onChange={(e) => setNewProjectEmail(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Accent Color
+                    </label>
+                    <div className="flex items-center gap-3">
+                      {['#6366f1', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4'].map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setNewProjectColor(color)}
+                          style={{ backgroundColor: color }}
+                          className={`w-7 h-7 rounded-full border-2 transition transform hover:scale-110 ${
+                            newProjectColor === color ? 'border-white scale-110' : 'border-transparent'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex flex-col gap-2">
+                    <button
+                      type="submit"
+                      disabled={creatingProject}
+                      className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition"
+                    >
+                      {creatingProject ? 'Creating Workspace...' : 'Launch My Workspace →'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={switchToDemo}
+                      className="w-full py-2.5 text-xs text-slate-400 hover:text-white transition"
+                    >
+                      Or explore the demo sandbox
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-black text-white">Restore Workspace</h2>
+                <p className="text-sm text-slate-400 mt-2">
+                  Enter your Project ID (e.g. `proj_xyz`) or the email you linked to open your dashboard.
+                </p>
+
+                <form onSubmit={handleRestoreProject} className="mt-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Project ID or Linked Email
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. proj_k82m9a or you@company.com"
+                      value={restoreQuery}
+                      onChange={(e) => setRestoreQuery(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500"
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="pt-2 flex flex-col gap-2">
+                    <button
+                      type="submit"
+                      disabled={creatingProject}
+                      className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition"
+                    >
+                      {creatingProject ? 'Restoring...' : 'Open My Workspace →'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalMode('create')}
+                      className="w-full py-2 text-xs text-slate-400 hover:text-white transition"
+                    >
+                      ← Back to Create Project
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -351,9 +511,12 @@ export default function DashboardPage() {
               {project?.plan === 'free' ? 'FREE' : 'PRO LIFETIME'}
             </span>
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => {
+                setModalMode('create');
+                setShowCreateModal(true);
+              }}
               className="ml-1 text-slate-400 hover:text-indigo-400 transition"
-              title="New Project"
+              title="New or Switch Project"
             >
               <FolderPlus className="w-3.5 h-3.5" />
             </button>
@@ -387,53 +550,73 @@ export default function DashboardPage() {
       {/* Main Container */}
       <div className="flex-1 max-w-6xl w-full mx-auto p-6 grid grid-cols-1 md:grid-cols-4 gap-8">
         {/* Sidebar Nav */}
-        <div className="space-y-2">
-          <button
-            onClick={() => setActiveTab('changelog')}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${
-              activeTab === 'changelog'
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            Changelog Feed ({changelogs.length})
-          </button>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <button
+              onClick={() => setActiveTab('changelog')}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${
+                activeTab === 'changelog'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              Changelog Feed ({changelogs.length})
+            </button>
 
-          <button
-            onClick={() => setActiveTab('roadmap')}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${
-              activeTab === 'roadmap'
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-            }`}
-          >
-            <ListTodo className="w-4 h-4" />
-            Roadmap & Votes ({roadmap.length})
-          </button>
+            <button
+              onClick={() => setActiveTab('roadmap')}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${
+                activeTab === 'roadmap'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <ListTodo className="w-4 h-4" />
+              Roadmap & Votes ({roadmap.length})
+            </button>
 
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${
-              activeTab === 'settings'
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            Settings & Billing
-          </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${
+                activeTab === 'settings'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              Settings & Billing
+            </button>
+          </div>
 
-          {/* Quick Embed Box with Unique Project ID */}
-          <div className="mt-8 p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Your Embed Tag
-              </h4>
-              <span className="text-[10px] font-mono text-indigo-400">ID: {project?.id}</span>
+          {/* Quick Access / Save Card */}
+          <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
+                Access Link
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">{project?.id}</span>
             </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Bookmark or copy your secret link to open this dashboard on any computer:
+            </p>
+            <button
+              onClick={copySecretLink}
+              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-slate-200 transition"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedLink ? 'Copied Dashboard URL!' : 'Copy Secret Login URL'}
+            </button>
+          </div>
+
+          {/* Quick Embed Tag Box */}
+          <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+              Your Embed Tag
+            </h4>
             <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-              Drop this script tag into your website. It loads your private changelog drawer:
+              Drop into your site's HTML to load your private widget:
             </p>
             <pre className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-indigo-300 overflow-x-auto whitespace-pre-wrap select-all">
               {embedScript}
@@ -697,6 +880,42 @@ export default function DashboardPage() {
                     </button>
                   )}
                 </div>
+              </div>
+
+              {/* Link Email Card (Lead Capture & Recovery) */}
+              <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
+                <div className="flex items-center gap-2 text-white font-bold text-base">
+                  <Mail className="w-4 h-4 text-indigo-400" />
+                  <h3>Link Email to Workspace</h3>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
+                  Attach your email so you can restore your dashboard anytime from any device by entering your email address.
+                </p>
+
+                {project?.ownerEmail ? (
+                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-xs font-semibold text-emerald-400">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Linked to: <strong>{project.ownerEmail}</strong></span>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveEmail} className="flex gap-3 max-w-md">
+                    <input
+                      type="email"
+                      placeholder="founder@company.com"
+                      value={attachEmail}
+                      onChange={(e) => setAttachEmail(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={savingEmail}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition"
+                    >
+                      {savingEmail ? 'Saving...' : 'Link Email'}
+                    </button>
+                  </form>
+                )}
               </div>
 
               {/* Branding and Project Details */}

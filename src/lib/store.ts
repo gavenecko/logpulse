@@ -194,6 +194,27 @@ export const db = {
     return data.projects.find((p) => p.id === id) || null;
   },
 
+  findProjectByQuery: async (query: string): Promise<Project | null> => {
+    const data = await loadData();
+    const cleanQuery = query.trim().toLowerCase();
+    return (
+      data.projects.find(
+        (p) =>
+          p.id.toLowerCase() === cleanQuery ||
+          (p.ownerEmail && p.ownerEmail.toLowerCase() === cleanQuery)
+      ) || null
+    );
+  },
+
+  updateProjectEmail: async (projectId: string, email: string): Promise<boolean> => {
+    const data = await loadData();
+    const proj = data.projects.find((p) => p.id === projectId);
+    if (!proj) return false;
+    proj.ownerEmail = email.trim();
+    await saveData(data);
+    return true;
+  },
+
   createProject: async (p: Omit<Project, 'id' | 'createdAt'>): Promise<Project> => {
     const data = await loadData();
     const newProject: Project = {

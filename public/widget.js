@@ -21,27 +21,6 @@
   // Check localStorage for read state
   const lastReadTime = localStorage.getItem(`logpulse_read_${projectId}`);
 
-  // Fetch widget data from API
-  async function fetchData() {
-    try {
-      const res = await fetch(`${baseUrl}/api/widget?projectId=${encodeURIComponent(projectId)}`);
-      if (!res.ok) return;
-      widgetData = await res.json();
-      
-      // Update unread badge based on published date
-      if (widgetData.changelogs && widgetData.changelogs.length > 0) {
-        const latestTime = new Date(widgetData.changelogs[0].publishedAt).getTime();
-        if (lastReadTime && Number(lastReadTime) >= latestTime) {
-          hasUnread = false;
-          hideBadge();
-        }
-      }
-      renderDrawerContent();
-    } catch (e) {
-      console.warn('[LogPulse] Failed to load updates:', e);
-    }
-  }
-
   // Inject Styles
   const style = document.createElement('style');
   style.textContent = `
@@ -50,27 +29,27 @@
       bottom: 24px;
       right: 24px;
       z-index: 999990;
-      width: 48px;
-      height: 48px;
+      width: 50px;
+      height: 50px;
       border-radius: 50%;
       background: #4f46e5;
       color: white;
       border: none;
-      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .logpulse-trigger-btn:hover {
       transform: scale(1.08);
-      box-shadow: 0 6px 20px rgba(79, 70, 229, 0.5);
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
     }
     .logpulse-badge {
       position: absolute;
-      top: -2px;
-      right: -2px;
+      top: -1px;
+      right: -1px;
       width: 12px;
       height: 12px;
       background: #ef4444;
@@ -83,8 +62,8 @@
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(15, 23, 42, 0.4);
-      backdrop-filter: blur(2px);
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(3px);
       z-index: 999998;
       opacity: 0;
       visibility: hidden;
@@ -99,10 +78,10 @@
       top: 0;
       right: 0;
       width: 100%;
-      max-width: 420px;
+      max-width: 100vw;
       height: 100vh;
       background: #ffffff;
-      box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+      box-shadow: -4px 0 30px rgba(0, 0, 0, 0.2);
       z-index: 999999;
       transform: translateX(100%);
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -110,6 +89,11 @@
       flex-direction: column;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: #0f172a;
+    }
+    @media (min-width: 440px) {
+      .logpulse-drawer {
+        max-width: 420px;
+      }
     }
     .logpulse-drawer.active {
       transform: translateX(0);
@@ -132,12 +116,13 @@
       border: none;
       color: #64748b;
       cursor: pointer;
-      font-size: 20px;
-      padding: 4px;
+      font-size: 18px;
+      padding: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 6px;
+      border-radius: 8px;
+      transition: background 0.15s ease;
     }
     .logpulse-close-btn:hover {
       background: #f1f5f9;
@@ -169,6 +154,7 @@
     .logpulse-body {
       flex: 1;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       padding: 20px;
       display: flex;
       flex-direction: column;
@@ -177,18 +163,20 @@
     .logpulse-card {
       background: #ffffff;
       border: 1px solid #e2e8f0;
-      border-radius: 10px;
+      border-radius: 12px;
       padding: 16px;
-      transition: border-color 0.2s ease;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
     .logpulse-card:hover {
       border-color: #cbd5e1;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     }
     .logpulse-tag {
       display: inline-block;
-      font-size: 11px;
-      font-weight: 700;
+      font-size: 10px;
+      font-weight: 800;
       text-transform: uppercase;
+      letter-spacing: 0.04em;
       padding: 2px 8px;
       border-radius: 9999px;
       margin-bottom: 8px;
@@ -210,7 +198,7 @@
     }
     .logpulse-item-desc {
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.55;
       color: #475569;
       margin: 0;
     }
@@ -308,7 +296,6 @@
     if (isOpen) {
       overlay.classList.add('active');
       drawer.classList.add('active');
-      // Mark as read
       localStorage.setItem(`logpulse_read_${projectId}`, Date.now().toString());
       hideBadge();
     } else {
@@ -321,6 +308,13 @@
   overlay.addEventListener('click', toggleDrawer);
   document.getElementById('logpulse-close-btn').addEventListener('click', toggleDrawer);
 
+  // Close on Escape key press
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isOpen) {
+      toggleDrawer();
+    }
+  });
+
   // Connect any custom trigger elements on the host page
   document.querySelectorAll('[data-logpulse-trigger]').forEach((el) => {
     el.addEventListener('click', (e) => {
@@ -331,13 +325,54 @@
 
   // Tab switching
   drawer.querySelectorAll('.logpulse-tab').forEach((tab) => {
-    tab.addEventListener('click', (e) => {
-      drawer.querySelectorAll('.logpulse-tab').forEach((t) => t.classList.remove('active'));
+    tab.addEventListener('click', () => {
+      drawer.querySelectorAll('.logpulse-tab').forEach((t) => {
+        t.classList.remove('active');
+        t.style.color = '#64748b';
+      });
       tab.classList.add('active');
+      if (widgetData?.project?.accentColor) {
+        tab.style.color = widgetData.project.accentColor;
+      }
       activeTab = tab.getAttribute('data-tab');
       renderDrawerContent();
     });
   });
+
+  // Fetch widget data from API
+  async function fetchData() {
+    try {
+      const res = await fetch(`${baseUrl}/api/widget?projectId=${encodeURIComponent(projectId)}`);
+      if (!res.ok) return;
+      widgetData = await res.json();
+
+      // Apply Project Accent Color
+      if (widgetData.project && widgetData.project.accentColor) {
+        const color = widgetData.project.accentColor;
+        triggerBtn.style.backgroundColor = color;
+        const activeTabEl = drawer.querySelector('.logpulse-tab.active');
+        if (activeTabEl) activeTabEl.style.color = color;
+      }
+
+      // Update drawer title with project name
+      if (widgetData.project && widgetData.project.name) {
+        const titleEl = document.getElementById('logpulse-drawer-title');
+        if (titleEl) titleEl.textContent = `${widgetData.project.name} Updates`;
+      }
+
+      // Update unread badge based on published date
+      if (widgetData.changelogs && widgetData.changelogs.length > 0) {
+        const latestTime = new Date(widgetData.changelogs[0].publishedAt).getTime();
+        if (lastReadTime && Number(lastReadTime) >= latestTime) {
+          hasUnread = false;
+          hideBadge();
+        }
+      }
+      renderDrawerContent();
+    } catch (e) {
+      console.warn('[LogPulse] Failed to load updates:', e);
+    }
+  }
 
   function renderDrawerContent() {
     const body = document.getElementById('logpulse-drawer-body');
@@ -402,7 +437,7 @@
 
       // Add upvote listeners
       body.querySelectorAll('[data-upvote-id]').forEach((btn) => {
-        btn.addEventListener('click', async (e) => {
+        btn.addEventListener('click', async () => {
           const itemId = btn.getAttribute('data-upvote-id');
           btn.disabled = true;
           try {
@@ -415,8 +450,9 @@
             if (data.success) {
               const countEl = btn.querySelector('.logpulse-upvote-count');
               if (countEl) countEl.textContent = data.upvotes;
-              btn.style.color = '#4f46e5';
-              btn.style.borderColor = '#4f46e5';
+              const accent = widgetData?.project?.accentColor || '#4f46e5';
+              btn.style.color = accent;
+              btn.style.borderColor = accent;
             }
           } catch (err) {
             console.error('Failed to upvote', err);

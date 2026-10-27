@@ -10,7 +10,6 @@ export async function POST(request: NextRequest) {
 
     if (stripeKey) {
       // Production Stripe Checkout session creation
-      // Dynamically load stripe or direct fetch to avoid hard dependency failure
       const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
         method: 'POST',
         headers: {
@@ -19,14 +18,14 @@ export async function POST(request: NextRequest) {
         },
         body: new URLSearchParams({
           mode: plan === 'pro_lifetime' ? 'payment' : 'subscription',
-          success_url: `${request.nextUrl.origin}/dashboard?upgraded=true`,
-          cancel_url: `${request.nextUrl.origin}/dashboard?canceled=true`,
+          success_url: `${request.nextUrl.origin}/dashboard?p=${encodeURIComponent(projectId)}&upgraded=true`,
+          cancel_url: `${request.nextUrl.origin}/dashboard?p=${encodeURIComponent(projectId)}&canceled=true`,
           'line_items[0][price_data][currency]': 'usd',
           'line_items[0][price_data][unit_amount]': plan === 'pro_lifetime' ? '2900' : '900',
           'line_items[0][price_data][product_data][name]':
             plan === 'pro_lifetime'
               ? 'LogPulse Early Bird Lifetime Pass'
-              : 'LogPulse Pro Subscription',
+              : 'LogPulse Pro Monthly Subscription',
           'line_items[0][quantity]': '1',
           client_reference_id: projectId,
         }),
@@ -36,12 +35,16 @@ export async function POST(request: NextRequest) {
       if (session.url) {
         return NextResponse.json({ url: session.url });
       }
+      if (session.error) {
+        console.error('Stripe error:', session.error);
+        return NextResponse.json({ error: session.error.message }, { status: 400 });
+      }
     }
 
     // Direct / Local Demo activation mode:
     await db.updateProjectPlan(projectId, plan);
     return NextResponse.json({
-      url: `/dashboard?upgraded=true&plan=${plan}`,
+      url: `/dashboard?p=${encodeURIComponent(projectId)}&upgraded=true&plan=${plan}`,
       demoActivated: true,
     });
   } catch (err: any) {
