@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customer Website Preview (LogPulse Embed Demo)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px;
+      text-align: center;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 520px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 28px;
+    }
+    p {
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+    .custom-btn {
+      margin-top: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #4f46e5;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .custom-btn:hover {
+      background: #4338ca;
+    }
+    .tip {
+      margin-top: 30px;
+      font-size: 13px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🚀 Simulated Customer Web App</h1>
+    <p>
+      This represents any user's SaaS app or website (e.g. Acme Analytics, Webflow page, or Shopify store).
+    </p>
+    <p>
+      Look at the <strong>floating bell icon in the bottom-right corner</strong>, or click the button below to open the LogPulse widget drawer!
+    </p>
+
+    <!-- Any button on the site can trigger the drawer with data-logpulse-trigger -->
+    <button class="custom-btn" data-logpulse-trigger>
+      🔔 View What's New & Upvote Roadmap
+    </button>
+
+    <div class="tip">
+      Powered by a 1-line script tag:
+      <br>
+      <code>&lt;script src="/widget.js" data-project-id="demo"&gt;&lt;/script&gt;</code>
+    </div>
+  </div>
+
+  <!-- LogPulse Embed Script -->
+  <script src="/widget.js" data-project-id="demo"></script>
+</body>
+</html>
