@@ -39,6 +39,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Item id is required' }, { status: 400 });
     }
 
+    // Protect official demo seed items from public deletion
+    if (id === 'ch-1' || id === 'ch-2' || id === 'ch-3') {
+      return NextResponse.json(
+        { error: 'Official demo items are protected from deletion.' },
+        { status: 403 }
+      );
+    }
+
     await db.deleteChangelog(id);
     return NextResponse.json({ success: true });
   } catch {

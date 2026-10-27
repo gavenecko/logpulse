@@ -9,14 +9,11 @@ import {
   Copy,
   Check,
   Sparkles,
-  ExternalLink,
   Layers,
   ListTodo,
   Settings,
   ThumbsUp,
-  Tag,
-  CreditCard,
-  CheckCircle2,
+  FolderPlus,
 } from 'lucide-react';
 import { ChangelogItem, RoadmapItem, Project } from '@/lib/types';
 
@@ -25,9 +22,17 @@ export default function DashboardPage() {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Active Project State
+  const [currentProjectId, setCurrentProjectId] = useState<string>('');
   const [project, setProject] = useState<Project | null>(null);
   const [changelogs, setChangelogs] = useState<ChangelogItem[]>([]);
   const [roadmap, setRoadmap] = useState<RoadmapItem[]>([]);
+
+  // Onboarding / Project Creation Modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectColor, setNewProjectColor] = useState('#6366f1');
+  const [creatingProject, setCreatingProject] = useState(false);
 
   // Form states
   const [newTitle, setNewTitle] = useState('');
@@ -41,14 +46,35 @@ export default function DashboardPage() {
   const [upgrading, setUpgrading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Load project data
-  const loadData = async () => {
+  // Initialize project from URL or localStorage
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramId = urlParams.get('p');
+    const storedId = localStorage.getItem('logpulse_project_id');
+
+    const idToLoad = paramId || storedId;
+    if (idToLoad) {
+      setCurrentProjectId(idToLoad);
+      loadProjectData(idToLoad);
+    } else {
+      // First time visitor: show onboarding modal
+      setShowCreateModal(true);
+      setLoading(false);
+    }
+  }, []);
+
+  const loadProjectData = async (projId: string) => {
+    setLoading(true);
     try {
-      const res = await fetch('/api/widget?projectId=demo');
-      const data = await res.json();
-      setProject(data.project);
-      setChangelogs(data.changelogs || []);
-      setRoadmap(data.roadmap || []);
+      const res = await fetch(`/api/widget?projectId=${encodeURIComponent(projId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProject(data.project);
+        setChangelogs(data.changelogs || []);
+        setRoadmap(data.roadmap || []);
+      } else {
+        setShowCreateModal(true);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -56,20 +82,60 @@ export default function DashboardPage() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) return;
+
+    setCreatingProject(true);
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newProjectName.trim(),
+          accentColor: newProjectColor,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.project) {
+        localStorage.setItem('logpulse_project_id', data.project.id);
+        setCurrentProjectId(data.project.id);
+        setProject(data.project);
+        setShowCreateModal(false);
+        setNewProjectName('');
+        window.history.replaceState(null, '', `?p=${data.project.id}`);
+        await loadProjectData(data.project.id);
+        setMessage(`🎉 Created workspace for ${data.project.name}!`);
+        setTimeout(() => setMessage(null), 4000);
+      } else {
+        alert(data.error || 'Failed to create project');
+      }
+    } catch {
+      alert('Error creating workspace');
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const switchToDemo = async () => {
+    localStorage.setItem('logpulse_project_id', 'demo');
+    setCurrentProjectId('demo');
+    window.history.replaceState(null, '', `?p=demo`);
+    await loadProjectData('demo');
+    setShowCreateModal(false);
+  };
 
   const handleAddChangelog = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newContent.trim()) return;
+    if (!newTitle.trim() || !newContent.trim() || !project) return;
 
     try {
       const res = await fetch('/api/changelogs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: 'demo',
+          projectId: project.id,
           title: newTitle,
           content: newContent,
           tag: newTag,
@@ -82,6 +148,8 @@ export default function DashboardPage() {
         setNewContent('');
         setMessage('Changelog published successfully!');
         setTimeout(() => setMessage(null), 3000);
+      } else {
+        alert(data.error || 'Failed to publish');
       }
     } catch {
       alert('Failed to publish');
@@ -92,8 +160,11 @@ export default function DashboardPage() {
     if (!confirm('Are you sure you want to delete this release note?')) return;
     try {
       const res = await fetch(`/api/changelogs?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.success) {
         setChangelogs(changelogs.filter((c) => c.id !== id));
+      } else {
+        alert(data.error || 'Cannot delete item');
       }
     } catch {
       alert('Failed to delete');
@@ -102,14 +173,14 @@ export default function DashboardPage() {
 
   const handleAddRoadmap = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!roadmapTitle.trim() || !roadmapDesc.trim()) return;
+    if (!roadmapTitle.trim() || !roadmapDesc.trim() || !project) return;
 
     try {
       const res = await fetch('/api/roadmap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: 'demo',
+          projectId: project.id,
           title: roadmapTitle,
           description: roadmapDesc,
           status: roadmapStatus,
@@ -122,6 +193,8 @@ export default function DashboardPage() {
         setRoadmapDesc('');
         setMessage('Roadmap item created!');
         setTimeout(() => setMessage(null), 3000);
+      } else {
+        alert(data.error || 'Failed to add roadmap item');
       }
     } catch {
       alert('Failed to add roadmap item');
@@ -147,18 +220,19 @@ export default function DashboardPage() {
   };
 
   const handleUpgrade = async (plan: 'pro_lifetime' | 'pro_monthly') => {
+    if (!project) return;
     setUpgrading(true);
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: 'demo', plan }),
+        body: JSON.stringify({ projectId: project.id, plan }),
       });
       const data = await res.json();
       if (data.url) {
         if (data.demoActivated) {
-          await loadData();
-          setMessage('🎉 Plan successfully upgraded to Pro Lifetime!');
+          await loadProjectData(project.id);
+          setMessage('🎉 Plan upgraded to Pro Lifetime!');
           setTimeout(() => setMessage(null), 4000);
         } else {
           window.location.href = data.url;
@@ -171,7 +245,8 @@ export default function DashboardPage() {
     }
   };
 
-  const embedScript = `<script src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourdomain.com'}/widget.js" data-project-id="${project?.id || 'demo'}" async></script>`;
+  const hostUrl = typeof window !== 'undefined' ? window.location.origin : 'https://logpulse-flame.vercel.app';
+  const embedScript = `<script src="${hostUrl}/widget.js" data-project-id="${project?.id || 'demo'}" async></script>`;
 
   const copyEmbed = () => {
     navigator.clipboard.writeText(embedScript);
@@ -181,8 +256,77 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
+      {/* Onboarding / New Project Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-8 shadow-2xl relative">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-4">
+              <Zap className="w-6 h-6" />
+            </div>
+            <h2 className="text-2xl font-black text-white">Create Your Project</h2>
+            <p className="text-sm text-slate-400 mt-2">
+              Set up your in-app changelog in seconds. You will get your own private board and embed snippet.
+            </p>
+
+            <form onSubmit={handleCreateProject} className="mt-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Project or Website Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. My Next.js SaaS, Portfolio, Acme App"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Accent Color
+                </label>
+                <div className="flex items-center gap-3">
+                  {['#6366f1', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4'].map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setNewProjectColor(color)}
+                      style={{ backgroundColor: color }}
+                      className={`w-7 h-7 rounded-full border-2 transition transform hover:scale-110 ${
+                        newProjectColor === color ? 'border-white scale-110' : 'border-transparent'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  type="submit"
+                  disabled={creatingProject}
+                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition"
+                >
+                  {creatingProject ? 'Creating Workspace...' : 'Launch My Workspace →'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={switchToDemo}
+                  className="w-full py-2.5 text-xs text-slate-400 hover:text-white transition"
+                >
+                  Or explore the demo sandbox
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-950/80 px-6 py-4 flex items-center justify-between sticky top-0 z-50 backdrop-blur">
+      <header className="border-b border-slate-800 bg-slate-950/80 px-6 py-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur">
         <div className="flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2 group">
             <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
@@ -191,19 +335,28 @@ export default function DashboardPage() {
             <span className="font-bold text-white text-lg tracking-tight">LogPulse</span>
           </Link>
           <span className="text-slate-600">/</span>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-300">
-              {project?.name || 'My Project'}
+
+          {/* Project Switcher Pill */}
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
+            <span className="text-sm font-semibold text-slate-200">
+              {project?.name || 'Loading...'}
             </span>
             <span
-              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                 project?.plan === 'free'
                   ? 'bg-slate-800 text-slate-400'
                   : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
               }`}
             >
-              {project?.plan === 'free' ? 'FREE PLAN' : 'PRO LIFETIME'}
+              {project?.plan === 'free' ? 'FREE' : 'PRO LIFETIME'}
             </span>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="ml-1 text-slate-400 hover:text-indigo-400 transition"
+              title="New Project"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
@@ -271,13 +424,16 @@ export default function DashboardPage() {
             Settings & Billing
           </button>
 
-          {/* Quick Embed Guide */}
+          {/* Quick Embed Box with Unique Project ID */}
           <div className="mt-8 p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
-            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-              Quick Embed
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Your Embed Tag
+              </h4>
+              <span className="text-[10px] font-mono text-indigo-400">ID: {project?.id}</span>
+            </div>
             <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-              Paste this tag into any website. It loads instantly and displays your updates.
+              Drop this script tag into your website. It loads your private changelog drawer:
             </p>
             <pre className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-indigo-300 overflow-x-auto whitespace-pre-wrap select-all">
               {embedScript}
@@ -294,16 +450,16 @@ export default function DashboardPage() {
               <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800">
                 <h3 className="text-base font-bold text-white flex items-center gap-2 mb-4">
                   <Plus className="w-4 h-4 text-indigo-400" />
-                  Publish New Release
+                  Publish New Release for {project?.name}
                 </h3>
                 <form onSubmit={handleAddChangelog} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">
-                      Title
+                      Release Title
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g., Added Webhook Support & CSV Exports"
+                      placeholder="e.g., Added Stripe Billing & Export to CSV"
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
@@ -331,11 +487,11 @@ export default function DashboardPage() {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">
-                      What changed? (Markdown or plain text)
+                      Release Notes (Markdown or plain text)
                     </label>
                     <textarea
                       rows={3}
-                      placeholder="Describe what is new, why users will love it, and any actions needed..."
+                      placeholder="Describe what changed and why your users will love it..."
                       value={newContent}
                       onChange={(e) => setNewContent(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
@@ -356,41 +512,47 @@ export default function DashboardPage() {
               {/* Existing Changelogs */}
               <div className="space-y-4">
                 <h4 className="text-sm font-bold text-slate-300">Published Updates ({changelogs.length})</h4>
-                {changelogs.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-5 rounded-2xl bg-slate-950/40 border border-slate-800/80 flex items-start justify-between gap-4 hover:border-slate-700 transition"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-                            item.tag === 'feature'
-                              ? 'bg-indigo-500/20 text-indigo-300'
-                              : item.tag === 'improvement'
-                              ? 'bg-emerald-500/20 text-emerald-300'
-                              : 'bg-rose-500/20 text-rose-300'
-                          }`}
-                        >
-                          {item.tag}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {new Date(item.publishedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-white text-base">{item.title}</h4>
-                      <p className="text-sm text-slate-400 leading-relaxed">{item.content}</p>
-                    </div>
-
-                    <button
-                      onClick={() => handleDeleteChangelog(item.id)}
-                      className="text-slate-500 hover:text-rose-400 p-2 rounded-lg hover:bg-slate-800 transition"
-                      title="Delete entry"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                {changelogs.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-sm border border-slate-800 rounded-2xl bg-slate-950/30">
+                    No updates published yet. Use the form above to post your first release!
                   </div>
-                ))}
+                ) : (
+                  changelogs.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-5 rounded-2xl bg-slate-950/40 border border-slate-800/80 flex items-start justify-between gap-4 hover:border-slate-700 transition"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                              item.tag === 'feature'
+                                ? 'bg-indigo-500/20 text-indigo-300'
+                                : item.tag === 'improvement'
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : 'bg-rose-500/20 text-rose-300'
+                            }`}
+                          >
+                            {item.tag}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {new Date(item.publishedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-white text-base">{item.title}</h4>
+                        <p className="text-sm text-slate-400 leading-relaxed">{item.content}</p>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteChangelog(item.id)}
+                        className="text-slate-500 hover:text-rose-400 p-2 rounded-lg hover:bg-slate-800 transition"
+                        title="Delete entry"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -402,7 +564,7 @@ export default function DashboardPage() {
               <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800">
                 <h3 className="text-base font-bold text-white flex items-center gap-2 mb-4">
                   <Plus className="w-4 h-4 text-indigo-400" />
-                  Add Roadmap Item
+                  Add Feature to Roadmap
                 </h3>
                 <form onSubmit={handleAddRoadmap} className="space-y-4">
                   <div>
@@ -411,7 +573,7 @@ export default function DashboardPage() {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Export data to Google Sheets & Zapier"
+                      placeholder="e.g. Google Calendar Sync"
                       value={roadmapTitle}
                       onChange={(e) => setRoadmapTitle(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
@@ -462,38 +624,44 @@ export default function DashboardPage() {
               {/* Roadmap List */}
               <div className="space-y-3">
                 <h4 className="text-sm font-bold text-slate-300">Feature Requests & Votes ({roadmap.length})</h4>
-                {roadmap.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-5 rounded-2xl bg-slate-950/40 border border-slate-800/80 flex items-start gap-4 hover:border-slate-700 transition"
-                  >
-                    <button
-                      onClick={() => handleUpvote(item.id)}
-                      className="flex flex-col items-center justify-center min-w-[50px] py-2 px-1 rounded-xl border border-slate-800 bg-slate-900 hover:border-indigo-500 hover:bg-indigo-950/40 transition group"
-                    >
-                      <ThumbsUp className="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition" />
-                      <span className="text-sm font-bold text-white mt-1">{item.upvotes}</span>
-                    </button>
-
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                            item.status === 'in_progress'
-                              ? 'bg-amber-500/20 text-amber-300'
-                              : item.status === 'completed'
-                              ? 'bg-emerald-500/20 text-emerald-300'
-                              : 'bg-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {item.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-white text-base">{item.title}</h4>
-                      <p className="text-sm text-slate-400 mt-1">{item.description}</p>
-                    </div>
+                {roadmap.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-sm border border-slate-800 rounded-2xl bg-slate-950/30">
+                    No roadmap items yet. Add one above!
                   </div>
-                ))}
+                ) : (
+                  roadmap.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-5 rounded-2xl bg-slate-950/40 border border-slate-800/80 flex items-start gap-4 hover:border-slate-700 transition"
+                    >
+                      <button
+                        onClick={() => handleUpvote(item.id)}
+                        className="flex flex-col items-center justify-center min-w-[50px] py-2 px-1 rounded-xl border border-slate-800 bg-slate-900 hover:border-indigo-500 hover:bg-indigo-950/40 transition group"
+                      >
+                        <ThumbsUp className="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition" />
+                        <span className="text-sm font-bold text-white mt-1">{item.upvotes}</span>
+                      </button>
+
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                              item.status === 'in_progress'
+                                ? 'bg-amber-500/20 text-amber-300'
+                                : item.status === 'completed'
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {item.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-white text-base">{item.title}</h4>
+                        <p className="text-sm text-slate-400 mt-1">{item.description}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -506,15 +674,15 @@ export default function DashboardPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-                      Current Plan
+                      Workspace: {project?.name}
                     </span>
                     <h3 className="text-2xl font-black text-white mt-1">
                       {project?.plan === 'free' ? 'Free Starter Plan' : 'Pro Lifetime Pass 🎉'}
                     </h3>
                     <p className="text-sm text-slate-400 mt-2 max-w-md">
                       {project?.plan === 'free'
-                        ? 'Upgrade to remove the "Powered by LogPulse" watermark and unlock custom themes.'
-                        : 'You have full unlimited lifetime access with zero monthly fees.'}
+                        ? 'Upgrade this project to remove the "Powered by LogPulse" watermark and unlock custom themes.'
+                        : 'This project has full unlimited lifetime access with zero monthly fees.'}
                     </p>
                   </div>
 
@@ -531,27 +699,26 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Branding and Color Customization */}
+              {/* Branding and Project Details */}
               <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
-                <h3 className="text-base font-bold text-white">Widget Customization</h3>
+                <h3 className="text-base font-bold text-white">Project Details</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">
-                      Show "Powered by LogPulse" Badge
+                      Project ID
                     </label>
-                    <div className="text-xs text-slate-400">
-                      {project?.plan === 'free'
-                        ? 'Active (Included on Free tier)'
-                        : 'Hidden (Disabled on Pro)'}
+                    <div className="text-xs font-mono text-slate-300 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                      {project?.id}
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">
-                      Accent Color
+                      Watermark Status
                     </label>
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-md bg-indigo-600 border border-slate-700"></div>
-                      <span className="text-xs font-mono text-slate-300">#6366f1</span>
+                    <div className="text-xs text-slate-300 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                      {project?.plan === 'free'
+                        ? 'Active ("Powered by LogPulse")'
+                        : 'Hidden (Disabled on Pro)'}
                     </div>
                   </div>
                 </div>
