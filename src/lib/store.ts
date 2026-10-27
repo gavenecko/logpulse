@@ -8,9 +8,6 @@ interface DatabaseSchema {
   roadmap: RoadmapItem[];
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'storage.json');
-
 const INITIAL_DATA: DatabaseSchema = {
   projects: [
     {
@@ -90,63 +87,137 @@ const INITIAL_DATA: DatabaseSchema = {
   ],
 };
 
-function ensureDataFile(): DatabaseSchema {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+// Global in-memory cache to survive across serverless function invocations
+const globalStore = global as unknown as { __logpulse_data?: DatabaseSchema };
+
+function getFilePath(): string {
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    return path.join('/tmp', 'storage.json');
   }
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(INITIAL_DATA, null, 2), 'utf-8');
-    return INITIAL_DATA;
+  const localDir = path.join(process.cwd(), 'data');
+  if (!fs.existsSync(localDir)) {
+    try {
+      fs.mkdirSync(localDir, { recursive: true });
+    } catch {}
   }
-  try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return INITIAL_DATA;
-  }
+  return path.join(localDir, 'storage.json');
 }
 
-function saveData(data: DatabaseSchema) {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+// Check if Vercel KV / Upstash Redis is configured
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+
+async function loadData(): Promise<DatabaseSchema> {
+  // 1. Try Vercel KV / Upstash if configured
+  if (KV_URL && KV_TOKEN) {
+    try {
+      const res = await fetch(`${KV_URL}/get/logpulse_db`, {
+        headers: { Authorization: `Bearer ${KV_TOKEN}` },
+        cache: 'no-store',
+      });
+      const data = await res.json();
+      if (data && data.result) {
+        const parsed = JSON.parse(data.result);
+        globalStore.__logpulse_data = parsed;
+        return parsed;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch from KV store:', err);
+    }
   }
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+
+  // 2. Return global memory if already loaded
+  if (globalStore.__logpulse_data) {
+    return globalStore.__logpulse_data;
+  }
+
+  // 3. Try reading from writable disk (/tmp or local)
+  const filePath = getFilePath();
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      globalStore.__logpulse_data = parsed;
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('Failed reading from disk:', err);
+  }
+
+  // 4. Default to initial seed
+  const defaultData: DatabaseSchema = JSON.parse(JSON.stringify(INITIAL_DATA));
+  globalStore.__logpulse_data = defaultData;
+  await saveData(defaultData);
+  return defaultData;
+}
+
+async function saveData(data: DatabaseSchema): Promise<void> {
+  globalStore.__logpulse_data = data;
+
+  // 1. Try Vercel KV / Upstash if configured
+  if (KV_URL && KV_TOKEN) {
+    try {
+      await fetch(`${KV_URL}/set/logpulse_db`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${KV_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(JSON.stringify(data)),
+      });
+    } catch (err) {
+      console.warn('Failed to persist to KV store:', err);
+    }
+  }
+
+  // 2. Try writing to writable disk (/tmp or local data)
+  try {
+    const filePath = getFilePath();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Disk write skipped or failed (using memory store):', err);
+  }
 }
 
 export const db = {
   getProjects: async (): Promise<Project[]> => {
-    return ensureDataFile().projects;
+    const data = await loadData();
+    return data.projects;
   },
 
   getProject: async (id: string): Promise<Project | null> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     return data.projects.find((p) => p.id === id) || null;
   },
 
   createProject: async (p: Omit<Project, 'id' | 'createdAt'>): Promise<Project> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     const newProject: Project = {
       ...p,
       id: 'proj_' + Math.random().toString(36).substring(2, 9),
       createdAt: new Date().toISOString(),
     };
     data.projects.push(newProject);
-    saveData(data);
+    await saveData(data);
     return newProject;
   },
 
   updateProjectPlan: async (projectId: string, plan: 'pro_lifetime' | 'pro_monthly'): Promise<boolean> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     const proj = data.projects.find((p) => p.id === projectId);
     if (!proj) return false;
     proj.plan = plan;
     proj.showBranding = false;
-    saveData(data);
+    await saveData(data);
     return true;
   },
 
   getChangelogs: async (projectId: string): Promise<ChangelogItem[]> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     return data.changelogs
       .filter((c) => c.projectId === projectId)
       .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
@@ -155,26 +226,26 @@ export const db = {
   addChangelog: async (
     item: Omit<ChangelogItem, 'id' | 'publishedAt'>
   ): Promise<ChangelogItem> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     const newItem: ChangelogItem = {
       ...item,
       id: 'ch_' + Math.random().toString(36).substring(2, 9),
       publishedAt: new Date().toISOString(),
     };
     data.changelogs.unshift(newItem);
-    saveData(data);
+    await saveData(data);
     return newItem;
   },
 
   deleteChangelog: async (id: string): Promise<boolean> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     data.changelogs = data.changelogs.filter((c) => c.id !== id);
-    saveData(data);
+    await saveData(data);
     return true;
   },
 
   getRoadmap: async (projectId: string): Promise<RoadmapItem[]> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     return data.roadmap
       .filter((r) => r.projectId === projectId)
       .sort((a, b) => b.upvotes - a.upvotes);
@@ -183,7 +254,7 @@ export const db = {
   addRoadmapItem: async (
     item: Omit<RoadmapItem, 'id' | 'upvotes' | 'createdAt'>
   ): Promise<RoadmapItem> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     const newItem: RoadmapItem = {
       ...item,
       id: 'rd_' + Math.random().toString(36).substring(2, 9),
@@ -191,16 +262,16 @@ export const db = {
       createdAt: new Date().toISOString(),
     };
     data.roadmap.push(newItem);
-    saveData(data);
+    await saveData(data);
     return newItem;
   },
 
   upvoteRoadmapItem: async (id: string): Promise<number | null> => {
-    const data = ensureDataFile();
+    const data = await loadData();
     const item = data.roadmap.find((r) => r.id === id);
     if (!item) return null;
     item.upvotes += 1;
-    saveData(data);
+    await saveData(data);
     return item.upvotes;
   },
 };
