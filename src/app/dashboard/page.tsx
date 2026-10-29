@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import LogoMark from '@/components/LogoMark';
 import {
-  Zap,
+
   Plus,
   Trash2,
   Copy,
@@ -339,9 +340,7 @@ export default function DashboardPage() {
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-8 shadow-2xl relative">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-                <Zap className="w-6 h-6" />
-              </div>
+              <LogoMark className="w-12 h-12 shrink-0" />
               <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
                 <button
                   type="button"
@@ -489,9 +488,7 @@ export default function DashboardPage() {
       <header className="border-b border-slate-800 bg-slate-950/80 px-6 py-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur">
         <div className="flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
-              <Zap className="w-4 h-4" />
-            </div>
+            <LogoMark className="w-8 h-8 shrink-0" />
             <span className="font-bold text-white text-lg tracking-tight">LogPulse</span>
           </Link>
           <span className="text-slate-600">/</span>

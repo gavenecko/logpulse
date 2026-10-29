@@ -2,12 +2,13 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import LogoMark from '@/components/LogoMark';
 import {
   Sparkles,
   Rocket,
   CheckCircle2,
   Code2,
-  Zap,
+
   ArrowRight,
   ShieldCheck,
   TrendingUp,
@@ -42,9 +43,7 @@ export default function LandingPage() {
       {/* Navigation */}
       <nav className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Zap className="w-5 h-5 text-white" />
-          </div>
+          <LogoMark className="w-9 h-9 shrink-0" />
           <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
             LogPulse
           </span>

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import LogoMark from '@/components/LogoMark';
 import {
   ShieldCheck,
   KeyRound,
@@ -11,7 +12,7 @@ import {
   Briefcase,
   Search,
   ExternalLink,
-  Zap,
+
   ArrowRight,
 } from 'lucide-react';
 
@@ -107,9 +108,7 @@ export default function AdminPage() {
       <header className="border-b border-slate-800 bg-slate-900/60 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
-              <Zap className="w-4 h-4" />
-            </div>
+            <LogoMark className="w-8 h-8 shrink-0" />
             <span className="font-bold text-white text-lg tracking-tight">LogPulse</span>
           </Link>
           <span className="text-slate-600">/</span>

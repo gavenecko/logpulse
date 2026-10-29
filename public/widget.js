@@ -281,7 +281,7 @@
       <div style="text-align:center; padding: 40px; color: #94a3b8;">Loading updates...</div>
     </div>
     <div class="logpulse-footer" id="logpulse-branding">
-      <a href="${baseUrl}" target="_blank" rel="noopener">⚡ Powered by LogPulse</a>
+      <a href="${baseUrl}" target="_blank" rel="noopener"><svg aria-hidden="true" focusable="false" style="width:16px;height:16px;vertical-align:middle;margin-right:4px" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="#6366f1"/><path d="M17 21h30M17 43h30M15 32h10l5-9 6 18 5-9h8" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Powered by LogPulse</a>
     </div>
   `;
   document.body.appendChild(drawer);
