@@ -102,6 +102,24 @@ export default function LandingPage() {
           </a>
         </div>
 
+        {/* Product Hunt launch badge */}
+        <div className="mt-8 flex justify-center">
+          <a
+            href="https://www.producthunt.com/products/logpulse-2?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-logpulse-2"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-400"
+          >
+            <img
+              alt="LogPulse - The 2-Minute Product Changelog &amp; Feature Roadmap Widget | Product Hunt"
+              width={250}
+              height={54}
+              src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1296657&amp;theme=dark&amp;t=1793249727719"
+              className="h-auto max-w-full"
+            />
+          </a>
+        </div>
+
         <div className="mt-6 flex items-center justify-center gap-6 text-xs text-slate-400">
           <span className="flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 60-second setup
